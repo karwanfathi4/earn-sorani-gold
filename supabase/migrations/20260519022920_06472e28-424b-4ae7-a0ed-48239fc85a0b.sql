@@ -1,0 +1,1 @@
+UPDATE public.app_settings SET ad_reward=0.01, ad_cooldown_seconds=15, ad_daily_limit=1000, daily_reward=0.10, min_withdrawal=0 WHERE id=1;
