@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       const { data: wd } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
 
       try {
-        const tronMod: any = await import("https://esm.sh/tronweb@5.3.2");
+        const tronMod: any = await import("https://esm.sh/tronweb@5.3.2?pin=v135");
         const TronWeb = tronMod.default ?? tronMod.TronWeb ?? tronMod;
         const headers: Record<string, string> = {};
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
