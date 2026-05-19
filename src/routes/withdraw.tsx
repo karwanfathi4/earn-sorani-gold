@@ -31,15 +31,21 @@ function WithdrawPage() {
     const amt = Number(amount);
     if (!(amt > 0) || amt > Number(profile?.balance ?? 0)) { toast.error(t("insufficient_balance")); return; }
     setBusy(true);
+    toast.loading("Sending USDT on TRON network…", { id: "wd" });
     const { data: sess } = await supabase.auth.getSession();
     const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rewards`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
-      body: JSON.stringify({ action: "request_withdrawal", amount: amt, wallet }),
+      body: JSON.stringify({ action: "withdraw_now", amount: amt, wallet }),
     }).then(r => r.json());
     setBusy(false);
-    if (r.error) { toast.error(r.error); return; }
-    toast.success(t("requested"));
+    toast.dismiss("wd");
+    if (r.error) {
+      toast.error(r.detail ? `${r.error}: ${String(r.detail).slice(0,120)}` : r.error);
+      refreshProfile(); loadHist();
+      return;
+    }
+    toast.success(`Paid! TX: ${String(r.tx_hash).slice(0,16)}…`, { duration: 8000 });
     setAmount("");
     refreshProfile();
     loadHist();
