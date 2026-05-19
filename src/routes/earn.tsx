@@ -17,6 +17,8 @@ function EarnPage() {
   const [adBusy, setAdBusy] = useState(false);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [adCountdown, setAdCountdown] = useState(0);
+  const [autoAds, setAutoAds] = useState(false);
+  const [adsToday, setAdsToday] = useState(0);
 
   const loadAll = async () => {
     const [s, ts, comps] = await Promise.all([
