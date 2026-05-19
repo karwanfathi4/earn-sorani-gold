@@ -31,15 +31,21 @@ function WithdrawPage() {
     const amt = Number(amount);
     if (!(amt > 0) || amt > Number(profile?.balance ?? 0)) { toast.error(t("insufficient_balance")); return; }
     setBusy(true);
+    toast.loading("Sending USDT on TRON network…", { id: "wd" });
     const { data: sess } = await supabase.auth.getSession();
     const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rewards`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
-      body: JSON.stringify({ action: "request_withdrawal", amount: amt, wallet }),
+      body: JSON.stringify({ action: "withdraw_now", amount: amt, wallet }),
     }).then(r => r.json());
     setBusy(false);
-    if (r.error) { toast.error(r.error); return; }
-    toast.success(t("requested"));
+    toast.dismiss("wd");
+    if (r.error) {
+      toast.error(r.detail ? `${r.error}: ${String(r.detail).slice(0,120)}` : r.error);
+      refreshProfile(); loadHist();
+      return;
+    }
+    toast.success(`Paid! TX: ${String(r.tx_hash).slice(0,16)}…`, { duration: 8000 });
     setAmount("");
     refreshProfile();
     loadHist();
@@ -58,17 +64,22 @@ function WithdrawPage() {
       </div>
 
       <form onSubmit={submit} className="glass p-4 space-y-3 fade-up">
-        <h2 className="font-semibold">{t("request_withdraw")}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">{t("request_withdraw")}</h2>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">LIVE · INSTANT</span>
+        </div>
         <div>
-          <label className="text-xs text-muted-foreground">{t("wallet_address")}</label>
+          <label className="text-xs text-muted-foreground">{t("wallet_address")} (USDT TRC20)</label>
           <input className="input-base mt-1 font-mono text-xs" placeholder="T..." value={wallet} onChange={(e) => setWallet(e.target.value)} />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("amount")} (USDT)</label>
           <input type="number" step="0.0001" min="0" className="input-base mt-1" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
-        <div className="text-xs text-muted-foreground">{t("network")}: TRC20</div>
-        <button disabled={busy} className="btn-gold w-full py-3">{busy ? t("loading") : t("submit")}</button>
+        <div className="text-[11px] text-muted-foreground leading-relaxed">
+          Sends directly on the TRON blockchain. Arrives in your wallet (Binance / Trust / etc.) in seconds.
+        </div>
+        <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Sending on-chain…" : "Cash out now"}</button>
       </form>
 
       <h2 className="text-sm font-semibold text-muted-foreground mt-6 mb-2 px-1">{t("history")}</h2>

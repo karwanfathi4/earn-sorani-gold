@@ -17,6 +17,8 @@ function EarnPage() {
   const [adBusy, setAdBusy] = useState(false);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [adCountdown, setAdCountdown] = useState(0);
+  const [autoAds, setAutoAds] = useState(false);
+  const [adsToday, setAdsToday] = useState(0);
 
   const loadAll = async () => {
     const [s, ts, comps] = await Promise.all([
@@ -59,16 +61,18 @@ function EarnPage() {
 
   const watchAd = async () => {
     setAdBusy(true);
-    // Simulate ad playback delay (demo). Replace with real AdSense rewarded later.
-    await new Promise((res) => setTimeout(res, 3500));
+    // Brief simulated ad playback (replace with real AdSense rewarded later)
+    await new Promise((res) => setTimeout(res, 1500));
     const r = await call({ action: "watch_ad" });
     setAdBusy(false);
     if (r.error) {
-      toast.error(r.error === "cooldown" ? t("ad_cooldown") : r.error === "limit" ? t("ad_limit_reached") : r.error);
+      if (r.error === "limit") { setAutoAds(false); toast.error(t("ad_limit_reached")); return; }
+      if (r.error !== "cooldown") toast.error(r.error);
       return;
     }
-    toast.success(`+${fmtUSD(r.reward)}`);
-    setAdCountdown(settings?.ad_cooldown_seconds ?? 30);
+    if (!autoAds) toast.success(`+${fmtUSD(r.reward)}`);
+    setAdsToday((n) => n + 1);
+    setAdCountdown(settings?.ad_cooldown_seconds ?? 15);
     refreshProfile();
   };
 
@@ -77,6 +81,15 @@ function EarnPage() {
     const i = setInterval(() => setAdCountdown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(i);
   }, [adCountdown]);
+
+  // Auto-watch loop: when ON, fires watch_ad as soon as cooldown hits 0
+  useEffect(() => {
+    if (!autoAds) return;
+    if (adBusy || adCountdown > 0) return;
+    const t = setTimeout(() => { watchAd(); }, 600);
+    return () => clearTimeout(t);
+  }, [autoAds, adBusy, adCountdown]);
+
 
   const completeTask = async (taskId: string, url: string | null) => {
     if (url) window.open(url, "_blank");
@@ -124,15 +137,20 @@ function EarnPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> {t("watch_ad")}</div>
-            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(settings?.ad_reward)} · {t("ad_reward")}</div>
+            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(settings?.ad_reward)} every {settings?.ad_cooldown_seconds ?? 15}s · up to {settings?.ad_daily_limit ?? 1000}/day</div>
           </div>
-          <button onClick={watchAd} disabled={adBusy || adCountdown > 0} className="btn-gold px-4 py-2 text-sm">
+          <button onClick={watchAd} disabled={adBusy || adCountdown > 0 || autoAds} className="btn-gold px-4 py-2 text-sm">
             {adBusy ? "▶ ..." : adCountdown > 0 ? `${adCountdown}s` : t("watch_ad")}
           </button>
         </div>
-        {/* AdSense placeholder slot (replace data-ad-client / slot when ready) */}
+        <button
+          onClick={() => setAutoAds((v) => !v)}
+          className={`mt-3 w-full py-2 rounded-xl text-sm font-semibold transition ${autoAds ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/5 text-foreground border border-white/10 hover:bg-white/10"}`}
+        >
+          {autoAds ? `● AUTO ON · ${adsToday} ads · +${fmtUSD(adsToday * Number(settings?.ad_reward ?? 0))}` : "Start Auto-Watch (earn hands-free)"}
+        </button>
         <div className="mt-3 h-16 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-[10px] text-muted-foreground">
-          ad slot · adsbygoogle placeholder
+          {autoAds ? `▶ playing ad ${adsToday + 1}…` : "ad slot · adsbygoogle"}
         </div>
       </div>
 
