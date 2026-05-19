@@ -61,16 +61,18 @@ function EarnPage() {
 
   const watchAd = async () => {
     setAdBusy(true);
-    // Simulate ad playback delay (demo). Replace with real AdSense rewarded later.
-    await new Promise((res) => setTimeout(res, 3500));
+    // Brief simulated ad playback (replace with real AdSense rewarded later)
+    await new Promise((res) => setTimeout(res, 1500));
     const r = await call({ action: "watch_ad" });
     setAdBusy(false);
     if (r.error) {
-      toast.error(r.error === "cooldown" ? t("ad_cooldown") : r.error === "limit" ? t("ad_limit_reached") : r.error);
+      if (r.error === "limit") { setAutoAds(false); toast.error(t("ad_limit_reached")); return; }
+      if (r.error !== "cooldown") toast.error(r.error);
       return;
     }
-    toast.success(`+${fmtUSD(r.reward)}`);
-    setAdCountdown(settings?.ad_cooldown_seconds ?? 30);
+    if (!autoAds) toast.success(`+${fmtUSD(r.reward)}`);
+    setAdsToday((n) => n + 1);
+    setAdCountdown(settings?.ad_cooldown_seconds ?? 15);
     refreshProfile();
   };
 
