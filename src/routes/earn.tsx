@@ -80,6 +80,15 @@ function EarnPage() {
     return () => clearInterval(i);
   }, [adCountdown]);
 
+  // Auto-watch loop: when ON, fires watch_ad as soon as cooldown hits 0
+  useEffect(() => {
+    if (!autoAds) return;
+    if (adBusy || adCountdown > 0) return;
+    const t = setTimeout(() => { watchAd(); }, 600);
+    return () => clearTimeout(t);
+  }, [autoAds, adBusy, adCountdown]);
+
+
   const completeTask = async (taskId: string, url: string | null) => {
     if (url) window.open(url, "_blank");
     await new Promise((res) => setTimeout(res, 2000));
