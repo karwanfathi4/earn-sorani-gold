@@ -137,15 +137,20 @@ function EarnPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> {t("watch_ad")}</div>
-            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(settings?.ad_reward)} · {t("ad_reward")}</div>
+            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(settings?.ad_reward)} every {settings?.ad_cooldown_seconds ?? 15}s · up to {settings?.ad_daily_limit ?? 1000}/day</div>
           </div>
-          <button onClick={watchAd} disabled={adBusy || adCountdown > 0} className="btn-gold px-4 py-2 text-sm">
+          <button onClick={watchAd} disabled={adBusy || adCountdown > 0 || autoAds} className="btn-gold px-4 py-2 text-sm">
             {adBusy ? "▶ ..." : adCountdown > 0 ? `${adCountdown}s` : t("watch_ad")}
           </button>
         </div>
-        {/* AdSense placeholder slot (replace data-ad-client / slot when ready) */}
+        <button
+          onClick={() => setAutoAds((v) => !v)}
+          className={`mt-3 w-full py-2 rounded-xl text-sm font-semibold transition ${autoAds ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/5 text-foreground border border-white/10 hover:bg-white/10"}`}
+        >
+          {autoAds ? `● AUTO ON · ${adsToday} ads · +${fmtUSD(adsToday * Number(settings?.ad_reward ?? 0))}` : "Start Auto-Watch (earn hands-free)"}
+        </button>
         <div className="mt-3 h-16 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-[10px] text-muted-foreground">
-          ad slot · adsbygoogle placeholder
+          {autoAds ? `▶ playing ad ${adsToday + 1}…` : "ad slot · adsbygoogle"}
         </div>
       </div>
 
