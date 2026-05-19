@@ -95,21 +95,46 @@ Deno.serve(async (req) => {
       return json({ ok: true, reward });
     }
 
-    if (action === "request_withdrawal") {
+    if (action === "withdraw_now" || action === "request_withdrawal") {
+      // LIVE on-chain TRC20 USDT payout
       const amount = Number(body.amount);
       const wallet = String(body.wallet || "").trim();
       if (!/^T[A-Za-z0-9]{33}$/.test(wallet)) return json({ error: "invalid_wallet" }, 400);
       if (!(amount > 0)) return json({ error: "invalid_amount" }, 400);
-      if (amount < Number(settings.min_withdrawal)) return json({ error: "below_min" }, 400);
       if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
-      // pending withdrawal check
-      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).eq("status", "pending");
+
+      const PK = Deno.env.get("TRON_PRIVATE_KEY");
+      if (!PK) return json({ error: "payout_not_configured" }, 500);
+
+      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing"]);
       if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
-      // Lock funds
-      await admin.from("profiles").update({ balance: Number(profile.balance) - amount }).eq("id", uid);
-      const { data: wd } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20" }).select().single();
-      await admin.from("profiles").update({ usdt_trc20_wallet: wallet }).eq("id", uid);
-      return json({ ok: true, withdrawal: wd });
+
+      // Lock funds immediately
+      await admin.from("profiles").update({ balance: Number(profile.balance) - amount, usdt_trc20_wallet: wallet }).eq("id", uid);
+      const { data: wd } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
+
+      try {
+        const tronMod: any = await import("https://esm.sh/tronweb@5.3.2");
+        const TronWeb = tronMod.default ?? tronMod.TronWeb ?? tronMod;
+        const headers: Record<string, string> = {};
+        const apiKey = Deno.env.get("TRONGRID_API_KEY");
+        if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
+        const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
+        const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+        const contract = await tronWeb.contract().at(USDT_CONTRACT);
+        const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
+        const tx: string = await contract.methods.transfer(wallet, valueInSun).send({ feeLimit: 100_000_000 });
+
+        await admin.from("withdrawals").update({ status: "paid", tx_hash: tx, processed_at: new Date().toISOString() }).eq("id", wd!.id);
+        await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal paid ✅", body: `${amount} USDT sent. TX: ${tx}` });
+        return json({ ok: true, tx_hash: tx, withdrawal_id: wd!.id });
+      } catch (err) {
+        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+        await admin.from("withdrawals").update({ status: "rejected", admin_note: String(err).slice(0, 500), processed_at: new Date().toISOString() }).eq("id", wd!.id);
+        console.error("payout failed", err);
+        return json({ error: "payout_failed", detail: String(err) }, 500);
+      }
     }
 
     if (action === "admin_update_withdrawal") {
