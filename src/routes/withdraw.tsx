@@ -8,15 +8,33 @@ import { fmtUSD, isValidTrc20 } from "@/lib/utils";
 import { toast } from "sonner";
 import { Wallet } from "lucide-react";
 
+const withdrawalMethods = [
+  { id: "usdt_trc20", label: "USDT-TRC20", helper: "Live on-chain payout to Binance, Trust Wallet, or any TRON USDT address." },
+  { id: "switch", label: "Switch", helper: "Manual request — admin pays from Switch and marks it paid." },
+  { id: "superqi", label: "SuperQi", helper: "Manual request — admin pays from SuperQi and marks it paid." },
+  { id: "asiacell", label: "Asiacell SIM", helper: "Manual request — admin sends balance/recharge and marks it paid." },
+  { id: "pubg_uc", label: "PUBG Mobile UC", helper: "Manual request — admin sends UC for the Player ID." },
+] as const;
+
+const pubgUcRows = [
+  ["60 UC", "$1.00"],
+  ["325 UC", "$5.00"],
+  ["660 UC", "$10.00"],
+  ["1,800 UC", "$25.00"],
+  ["3,850 UC", "$50.00"],
+  ["8,100 UC", "$100.00"],
+];
+
 function WithdrawPage() {
   const { t } = useI18n();
   const { profile, refreshProfile, user } = useAuth();
+  const [method, setMethod] = useState<(typeof withdrawalMethods)[number]["id"]>("usdt_trc20");
   const [wallet, setWallet] = useState("");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
 
-  useEffect(() => { if (profile?.usdt_trc20_wallet) setWallet(profile.usdt_trc20_wallet); }, [profile?.usdt_trc20_wallet]);
+  const selectedMethod = withdrawalMethods.find((m) => m.id === method)!;
 
   const loadHist = async () => {
     if (!user) return;
@@ -27,16 +45,17 @@ function WithdrawPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidTrc20(wallet)) { toast.error(t("invalid_wallet")); return; }
+    if (method === "usdt_trc20" && !isValidTrc20(wallet)) { toast.error(t("invalid_wallet")); return; }
+    if (method !== "usdt_trc20" && wallet.trim().length < 3) { toast.error("Enter the account / phone / Player ID first"); return; }
     const amt = Number(amount);
     if (!(amt > 0) || amt > Number(profile?.balance ?? 0)) { toast.error(t("insufficient_balance")); return; }
     setBusy(true);
-    toast.loading("Sending USDT on TRON network…", { id: "wd" });
+    toast.loading(method === "usdt_trc20" ? "Sending USDT on TRON network…" : "Sending request to admin queue…", { id: "wd" });
     const { data: sess } = await supabase.auth.getSession();
     const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rewards`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
-      body: JSON.stringify({ action: "withdraw_now", amount: amt, wallet }),
+      body: JSON.stringify({ action: method === "usdt_trc20" ? "withdraw_now" : "request_withdrawal", amount: amt, wallet, method }),
     }).then(r => r.json());
     setBusy(false);
     toast.dismiss("wd");
@@ -45,7 +64,7 @@ function WithdrawPage() {
       refreshProfile(); loadHist();
       return;
     }
-    toast.success(`Paid! TX: ${String(r.tx_hash).slice(0,16)}…`, { duration: 8000 });
+    toast.success(r.tx_hash ? `Paid! TX: ${String(r.tx_hash).slice(0,16)}…` : "Request sent to admin queue", { duration: 8000 });
     setAmount("");
     refreshProfile();
     loadHist();
