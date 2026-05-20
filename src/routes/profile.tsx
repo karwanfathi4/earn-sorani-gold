@@ -10,13 +10,11 @@ import { LogOut, Bell } from "lucide-react";
 function ProfilePage() {
   const { t } = useI18n();
   const { profile, user, signOut, refreshProfile, isAdmin } = useAuth();
-  const [telegram, setTelegram] = useState("");
   const [wallet, setWallet] = useState("");
   const [busy, setBusy] = useState(false);
   const [notifs, setNotifs] = useState<any[]>([]);
 
   useEffect(() => {
-    setTelegram(profile?.telegram_username ?? "");
     setWallet(profile?.usdt_trc20_wallet ?? "");
   }, [profile]);
 
@@ -28,7 +26,6 @@ function ProfilePage() {
   const save = async () => {
     setBusy(true);
     const { error } = await supabase.from("profiles").update({
-      telegram_username: telegram || null,
       usdt_trc20_wallet: wallet || null,
     }).eq("id", user!.id);
     setBusy(false);
@@ -65,10 +62,6 @@ function ProfilePage() {
       </div>
 
       <div className="glass p-4 mb-3 space-y-3 fade-up">
-        <div>
-          <label className="text-xs text-muted-foreground">Telegram</label>
-          <input className="input-base mt-1" placeholder="@username" value={telegram} onChange={(e) => setTelegram(e.target.value)} />
-        </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("wallet_address")}</label>
           <input className="input-base mt-1 font-mono text-xs" placeholder="T..." value={wallet} onChange={(e) => setWallet(e.target.value)} />

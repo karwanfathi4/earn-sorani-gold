@@ -82,6 +82,7 @@ function AdminPage() {
                 <span className="font-semibold">{w.profile?.username}</span>
                 <span className="text-gold font-mono">{fmtUSD(w.amount)}</span>
               </div>
+              <div className="text-xs text-gold">Method: <b>{w.network ?? "TRC20"}</b></div>
               <div className="text-[10px] font-mono text-muted-foreground truncate">{w.wallet_address}</div>
               <div className="text-xs">Status: <b>{w.status}</b></div>
               {w.tx_hash && <div className="text-[10px] text-emerald-400 font-mono truncate">{w.tx_hash}</div>}
@@ -133,10 +134,6 @@ function AdminPage() {
 
       {tab === "settings" && settings && (
         <div className="glass p-4 space-y-3">
-          <label className="flex items-center justify-between text-sm">
-            <span>{t("demo_mode")}</span>
-            <input type="checkbox" checked={settings.demo_mode} onChange={(e) => setSettings({ ...settings, demo_mode: e.target.checked })} />
-          </label>
           {[
             ["ad_reward", t("ad_reward_amount")],
             ["daily_reward", t("daily_reward_amount")],
@@ -150,10 +147,6 @@ function AdminPage() {
               <input className="input-base mt-1" type="number" step="0.0001" value={settings[k]} onChange={(e) => setSettings({ ...settings, [k]: Number(e.target.value) })} />
             </div>
           ))}
-          <div>
-            <label className="text-xs text-muted-foreground">Telegram channel URL</label>
-            <input className="input-base mt-1" value={settings.telegram_channel ?? ""} onChange={(e) => setSettings({ ...settings, telegram_channel: e.target.value })} />
-          </div>
           <button onClick={saveSettings} className="btn-gold w-full py-2.5">{t("save")}</button>
         </div>
       )}

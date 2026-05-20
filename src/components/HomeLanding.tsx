@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { Coins, Users, Wallet, TrendingUp, ShieldCheck, Send } from "lucide-react";
+import { Users, Wallet, TrendingUp } from "lucide-react";
 import { LangToggle } from "@/components/LangToggle";
 
 export function HomeLanding() {
@@ -55,12 +55,6 @@ export function HomeLanding() {
               <p className="text-sm text-muted-foreground mt-1">{f.d}</p>
             </div>
           ))}
-        </section>
-
-        <section className="glass-gold p-6 my-8 text-center">
-          <Send className="inline text-gold mb-2" />
-          <p className="text-sm">{t("telegram_channel")}</p>
-          <a href="https://t.me/yourchannel" target="_blank" rel="noopener noreferrer" className="btn-gold inline-block mt-3 px-5 py-2 text-sm">{t("join")}</a>
         </section>
 
         <footer className="text-center py-8 text-xs text-muted-foreground border-t border-white/5 mt-8">

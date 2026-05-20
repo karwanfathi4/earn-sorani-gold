@@ -18,16 +18,16 @@ function TermsPage() {
           <h1 className="text-2xl font-bold gold-gradient-text mb-4">{t("terms")}</h1>
           {lang === "ku" ? (
             <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
-              <p>بە بەکارهێنانی GoldEarn، تۆ ڕازی دەبیت بەم مەرجانە. پلاتفۆرمەکە خەڵاتی ڕاستەقینە یان نموونە دەبەخشێت بەپێی ڕێکخستنەکانی بەڕێوەبەر.</p>
+              <p>بە بەکارهێنانی GoldEarn، تۆ ڕازی دەبیت بەم مەرجانە. پلاتفۆرمەکە تەنها باڵانسی ڕاستەقینەی قابل دەرکردن پیشان دەدات.</p>
               <p>هیچ گەرەنتیەک نییە بۆ بڕی پارەی بەدەستهاتوو. هەر هەژمارێک کە سپام یاخود بۆت بەکاربهێنێت، ڕاستەوخۆ هەڵدەوەشێتەوە.</p>
-              <p>دەرکردنی پارە لە ڕێگەی USDT TRC20ـەوە دەکرێت، دوای پەسەندکردنی بەڕێوەبەر.</p>
+              <p>دەرکردنی USDT TRC20 ڕاستەوخۆ لەسەر بلاکچەینە؛ شێوازەکانی تر دەچنە ڕیزی بەڕێوەبەر بۆ پارەدان لە هەژماری خاوەن.</p>
               <p>زانیاری کەسی تۆ بە پارێزراوی هەڵدەگیرێت و بۆ هیچ لایەنێکی سێیەم ناڕەوانێت.</p>
             </div>
           ) : (
             <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
-              <p>By using GoldEarn you agree to these terms. The platform credits real or demo rewards per admin settings.</p>
+              <p>By using GoldEarn you agree to these terms. The platform displays only real withdrawable balances.</p>
               <p>No guarantee is made on the amount you can earn. Any account that uses spam or bots is removed immediately.</p>
-              <p>Withdrawals are processed via USDT on the TRC20 network after admin approval.</p>
+              <p>USDT TRC20 withdrawals are sent live on-chain; other withdrawal methods go to the admin queue for manual payment by the owner.</p>
               <p>Your personal data is stored securely and never shared with third parties.</p>
             </div>
           )}

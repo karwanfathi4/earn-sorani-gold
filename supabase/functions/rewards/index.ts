@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
 
     if (action === "watch_ad") {
       // anti-spam: count ads in last 60s and last 24h
-      const since60 = new Date(Date.now() - 1000 * settings.ad_cooldown_seconds).toISOString();
+      const cooldownSeconds = Math.max(30, Number(settings.ad_cooldown_seconds ?? 30));
+      const dailyLimit = Math.min(100, Number(settings.ad_daily_limit ?? 100));
+      const safeAdReward = Math.min(0.001, Number(settings.ad_reward ?? 0.001));
+      const since60 = new Date(Date.now() - 1000 * cooldownSeconds).toISOString();
       const since24h = new Date(Date.now() - 86400000).toISOString();
       const { count: recent } = await admin.from("ad_views").select("*", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", since60);
       if ((recent ?? 0) > 0) return json({ error: "cooldown" }, 429);
       const { count: today } = await admin.from("ad_views").select("*", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", since24h);
-      if ((today ?? 0) >= settings.ad_daily_limit) return json({ error: "limit" }, 429);
-      const reward = Number(settings.ad_reward);
+      if ((today ?? 0) >= dailyLimit) return json({ error: "limit" }, 429);
+      const reward = safeAdReward;
       await admin.from("ad_views").insert({ user_id: uid, reward });
       await admin.from("profiles").update({
         balance: Number(profile.balance) + reward,
@@ -95,7 +98,38 @@ Deno.serve(async (req) => {
       return json({ ok: true, reward });
     }
 
-    if (action === "withdraw_now" || action === "request_withdrawal") {
+    if (action === "request_withdrawal") {
+      // Manual payout methods go to the admin queue after locking the user's real balance.
+      const amount = Number(body.amount);
+      const wallet = String(body.wallet || "").trim();
+      const method = String(body.method || "manual").trim().toLowerCase();
+      const allowedMethods = new Set(["switch", "superqi", "asiacell", "pubg_uc"]);
+      if (!allowedMethods.has(method)) return json({ error: "invalid_method" }, 400);
+      if (wallet.length < 3 || wallet.length > 160) return json({ error: "account_details_required" }, 400);
+      if (!(amount > 0)) return json({ error: "invalid_amount" }, 400);
+      if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
+
+      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
+      if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
+
+      await admin.from("profiles").update({ balance: Number(profile.balance) - amount }).eq("id", uid);
+      const { data: wd, error: wdErr } = await admin.from("withdrawals").insert({
+        user_id: uid,
+        amount,
+        wallet_address: wallet,
+        network: method.toUpperCase(),
+        status: "pending",
+      }).select().single();
+      if (wdErr) {
+        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+        return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
+      }
+      await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal requested", body: `${amount} requested via ${method.toUpperCase()}. Admin will pay manually.` });
+      return json({ ok: true, withdrawal_id: wd!.id, status: "pending" });
+    }
+
+    if (action === "withdraw_now") {
       // LIVE on-chain TRC20 USDT payout
       const amount = Number(body.amount);
       const wallet = String(body.wallet || "").trim();
@@ -106,12 +140,17 @@ Deno.serve(async (req) => {
       const PK = Deno.env.get("TRON_PRIVATE_KEY");
       if (!PK) return json({ error: "payout_not_configured" }, 500);
 
-      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing"]);
+      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
       if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
 
       // Lock funds immediately
       await admin.from("profiles").update({ balance: Number(profile.balance) - amount, usdt_trc20_wallet: wallet }).eq("id", uid);
-      const { data: wd } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
+      const { data: wd, error: wdErr } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
+      if (wdErr) {
+        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+        return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
+      }
 
       try {
         const tronMod: any = await import("https://esm.sh/tronweb@6.0.0");
@@ -120,6 +159,7 @@ Deno.serve(async (req) => {
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
         if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
         const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
+        if (!tronWeb.isAddress(wallet)) throw new Error("invalid_wallet");
         const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
         const contract = await tronWeb.contract().at(USDT_CONTRACT);
         const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
@@ -148,7 +188,7 @@ Deno.serve(async (req) => {
       const { data: wd } = await admin.from("withdrawals").select("*").eq("id", id).single();
       if (!wd) return json({ error: "not_found" }, 404);
       // If rejecting a pending one, refund balance
-      if (wd.status === "pending" && status === "rejected") {
+      if (["pending", "approved", "processing"].includes(wd.status) && status === "rejected") {
         const { data: p } = await admin.from("profiles").select("balance").eq("id", wd.user_id).single();
         if (p) await admin.from("profiles").update({ balance: Number(p.balance) + Number(wd.amount) }).eq("id", wd.user_id);
       }
