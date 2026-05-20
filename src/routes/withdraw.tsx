@@ -85,19 +85,41 @@ function WithdrawPage() {
       <form onSubmit={submit} className="glass p-4 space-y-3 fade-up">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{t("request_withdraw")}</h2>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">LIVE · INSTANT</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{method === "usdt_trc20" ? "LIVE · ON-CHAIN" : "ADMIN QUEUE"}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {withdrawalMethods.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => { setMethod(m.id); setWallet(""); }}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${method === m.id ? "border-gold bg-gold/15 text-gold" : "border-white/10 bg-white/5 text-muted-foreground"}`}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
         <div>
-          <label className="text-xs text-muted-foreground">{t("wallet_address")} (USDT TRC20)</label>
-          <input className="input-base mt-1 font-mono text-xs" placeholder="T..." value={wallet} onChange={(e) => setWallet(e.target.value)} />
+          <label className="text-xs text-muted-foreground">{method === "usdt_trc20" ? `${t("wallet_address")} (USDT TRC20)` : `${selectedMethod.label} account details`}</label>
+          <input className="input-base mt-1 font-mono text-xs" placeholder={method === "usdt_trc20" ? "T..." : "Account / phone / PUBG Player ID"} value={wallet} onChange={(e) => setWallet(e.target.value)} />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("amount")} (USDT)</label>
           <input type="number" step="0.0001" min="0" className="input-base mt-1" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="text-[11px] text-muted-foreground leading-relaxed">
-          Sends directly on the TRON blockchain. Arrives in your wallet (Binance / Trust / etc.) in seconds.
+          {selectedMethod.helper}
         </div>
+        {method === "pubg_uc" && (
+          <div className="rounded-xl border border-white/10 overflow-hidden text-xs">
+            {pubgUcRows.map(([uc, price]) => (
+              <div key={uc} className="flex items-center justify-between px-3 py-2 border-b border-white/5 last:border-b-0">
+                <span>{uc}</span>
+                <span className="text-gold font-mono">{price}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Sending on-chain…" : "Cash out now"}</button>
       </form>
 
@@ -110,6 +132,7 @@ function WithdrawPage() {
               <div className="font-semibold">{fmtUSD(h.amount)}</div>
               <div className={`text-xs ${statusColor[h.status] ?? ""}`}>{t(h.status as any)}</div>
             </div>
+            <div className="text-[10px] text-gold mt-1">{h.network ?? "TRC20"}</div>
             <div className="text-[10px] text-muted-foreground font-mono truncate mt-1">{h.wallet_address}</div>
             {h.tx_hash && <div className="text-[10px] text-emerald-400 font-mono truncate">TX: {h.tx_hash}</div>}
           </div>
