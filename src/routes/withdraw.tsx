@@ -120,7 +120,7 @@ function WithdrawPage() {
             ))}
           </div>
         )}
-        <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Sending on-chain…" : "Cash out now"}</button>
+        <button disabled={busy} className="btn-gold w-full py-3">{busy ? (method === "usdt_trc20" ? "Sending on-chain…" : "Submitting request…") : "Cash out now"}</button>
       </form>
 
       <h2 className="text-sm font-semibold text-muted-foreground mt-6 mb-2 px-1">{t("history")}</h2>
