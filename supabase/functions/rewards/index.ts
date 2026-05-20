@@ -145,7 +145,12 @@ Deno.serve(async (req) => {
 
       // Lock funds immediately
       await admin.from("profiles").update({ balance: Number(profile.balance) - amount, usdt_trc20_wallet: wallet }).eq("id", uid);
-      const { data: wd } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
+      const { data: wd, error: wdErr } = await admin.from("withdrawals").insert({ user_id: uid, amount, wallet_address: wallet, network: "TRC20", status: "processing" }).select().single();
+      if (wdErr) {
+        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+        return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
+      }
 
       try {
         const tronMod: any = await import("https://esm.sh/tronweb@6.0.0");
@@ -154,6 +159,7 @@ Deno.serve(async (req) => {
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
         if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
         const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
+        if (!tronWeb.isAddress(wallet)) return json({ error: "invalid_wallet" }, 400);
         const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
         const contract = await tronWeb.contract().at(USDT_CONTRACT);
         const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
