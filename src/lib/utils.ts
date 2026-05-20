@@ -5,9 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function fmtUSD(n: number | string | null | undefined) {
+export function fmtUSD(n: number | string | null | undefined, decimals = 2) {
   const v = Number(n ?? 0);
-  return `$${v.toFixed(4)}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Number.isFinite(v) ? v : 0);
 }
 
 export function isValidTrc20(addr: string) {
