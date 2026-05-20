@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
         if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
         const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
-        if (!tronWeb.isAddress(wallet)) return json({ error: "invalid_wallet" }, 400);
+        if (!tronWeb.isAddress(wallet)) throw new Error("invalid_wallet");
         const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
         const contract = await tronWeb.contract().at(USDT_CONTRACT);
         const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
