@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
 
     if (action === "watch_ad") {
       // anti-spam: count ads in last 60s and last 24h
-      const since60 = new Date(Date.now() - 1000 * settings.ad_cooldown_seconds).toISOString();
+      const cooldownSeconds = Math.max(30, Number(settings.ad_cooldown_seconds ?? 30));
+      const dailyLimit = Math.min(100, Number(settings.ad_daily_limit ?? 100));
+      const safeAdReward = Math.min(0.001, Number(settings.ad_reward ?? 0.001));
+      const since60 = new Date(Date.now() - 1000 * cooldownSeconds).toISOString();
       const since24h = new Date(Date.now() - 86400000).toISOString();
       const { count: recent } = await admin.from("ad_views").select("*", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", since60);
       if ((recent ?? 0) > 0) return json({ error: "cooldown" }, 429);
       const { count: today } = await admin.from("ad_views").select("*", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", since24h);
-      if ((today ?? 0) >= settings.ad_daily_limit) return json({ error: "limit" }, 429);
-      const reward = Number(settings.ad_reward);
+      if ((today ?? 0) >= dailyLimit) return json({ error: "limit" }, 429);
+      const reward = safeAdReward;
       await admin.from("ad_views").insert({ user_id: uid, reward });
       await admin.from("profiles").update({
         balance: Number(profile.balance) + reward,
@@ -179,7 +182,7 @@ Deno.serve(async (req) => {
       const { data: wd } = await admin.from("withdrawals").select("*").eq("id", id).single();
       if (!wd) return json({ error: "not_found" }, 404);
       // If rejecting a pending one, refund balance
-      if (wd.status === "pending" && status === "rejected") {
+      if (["pending", "approved", "processing"].includes(wd.status) && status === "rejected") {
         const { data: p } = await admin.from("profiles").select("balance").eq("id", wd.user_id).single();
         if (p) await admin.from("profiles").update({ balance: Number(p.balance) + Number(wd.amount) }).eq("id", wd.user_id);
       }
