@@ -66,6 +66,7 @@ function WithdrawPage() {
         <Wallet className="text-gold mb-2" />
         <div className="text-xs text-muted-foreground">{t("balance")}</div>
         <div className="text-3xl font-bold gold-gradient-text">{fmtUSD(profile?.balance)}</div>
+        <div className="text-[11px] text-muted-foreground mt-1">Exact: {fmtUSD(profile?.balance, 4)} available for USDT-TRC20 cashout</div>
       </div>
 
       <form onSubmit={submit} className="glass p-4 space-y-3 fade-up">

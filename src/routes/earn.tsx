@@ -119,6 +119,7 @@ function EarnPage() {
       <div className="glass-gold p-5 mb-4 fade-up">
         <div className="text-xs text-muted-foreground">{t("balance")}</div>
         <div className="text-4xl font-bold gold-gradient-text">{fmtUSD(profile?.balance)}</div>
+        <div className="text-[11px] text-muted-foreground mt-1">Exact: {fmtUSD(profile?.balance, 4)} withdrawable USDT</div>
         <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
           <span>{t("total_earned")}: <b className="text-foreground">{fmtUSD(profile?.total_earned)}</b></span>
           <span className="flex items-center gap-1"><Flame size={12} className="text-orange-400" /> {profile?.streak_days ?? 0} {t("days")}</span>
