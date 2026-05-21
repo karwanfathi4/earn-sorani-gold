@@ -10,20 +10,7 @@ import { Wallet } from "lucide-react";
 
 const withdrawalMethods = [
   { id: "usdt_trc20", label: "USDT-TRC20", helper: "Live on-chain payout to Binance, Trust Wallet, or any TRON USDT address." },
-  { id: "switch", label: "Switch", helper: "Manual request — admin pays from Switch and marks it paid." },
-  { id: "superqi", label: "SuperQi", helper: "Manual request — admin pays from SuperQi and marks it paid." },
-  { id: "asiacell", label: "Asiacell SIM", helper: "Manual request — admin sends balance/recharge and marks it paid." },
-  { id: "pubg_uc", label: "PUBG Mobile UC", helper: "Manual request — admin sends UC for the Player ID." },
 ] as const;
-
-const pubgUcRows = [
-  ["60 UC", "$1.00"],
-  ["325 UC", "$5.00"],
-  ["660 UC", "$10.00"],
-  ["1,800 UC", "$25.00"],
-  ["3,850 UC", "$50.00"],
-  ["8,100 UC", "$100.00"],
-];
 
 function WithdrawPage() {
   const { t } = useI18n();
@@ -45,26 +32,37 @@ function WithdrawPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (method === "usdt_trc20" && !isValidTrc20(wallet)) { toast.error(t("invalid_wallet")); return; }
-    if (method !== "usdt_trc20" && wallet.trim().length < 3) { toast.error("Enter the account / phone / Player ID first"); return; }
+    if (!isValidTrc20(wallet)) { toast.error(t("invalid_wallet")); return; }
     const amt = Number(amount);
     if (!(amt > 0) || amt > Number(profile?.balance ?? 0)) { toast.error(t("insufficient_balance")); return; }
     setBusy(true);
-    toast.loading(method === "usdt_trc20" ? "Sending USDT on TRON network…" : "Sending request to admin queue…", { id: "wd" });
+    toast.loading("Sending USDT on TRON network…", { id: "wd" });
     const { data: sess } = await supabase.auth.getSession();
     const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rewards`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
-      body: JSON.stringify({ action: method === "usdt_trc20" ? "withdraw_now" : "request_withdrawal", amount: amt, wallet, method }),
+      body: JSON.stringify({ action: "withdraw_now", amount: amt, wallet, method: "usdt_trc20" }),
     }).then(r => r.json());
     setBusy(false);
     toast.dismiss("wd");
     if (r.error) {
-      toast.error(r.detail ? `${r.error}: ${String(r.detail).slice(0,120)}` : r.error);
+      const detail = String(r.detail ?? "");
+      const friendly = detail.includes("hot_wallet_not_activated")
+        ? "Cashout wallet needs TRX first. Fund the payout wallet, then try again."
+        : detail.includes("hot_wallet_needs_trx")
+          ? "Cashout wallet needs TRX for network fees."
+          : detail.includes("hot_wallet_needs_usdt")
+            ? "Cashout wallet needs USDT to pay users."
+            : r.error === "already_pending"
+              ? "You already have a cashout being processed."
+              : r.error === "payout_failed" && detail
+                ? detail.slice(0, 140)
+                : r.error;
+      toast.error(friendly);
       refreshProfile(); loadHist();
       return;
     }
-    toast.success(r.tx_hash ? `Paid! TX: ${String(r.tx_hash).slice(0,16)}…` : "Request sent to admin queue", { duration: 8000 });
+    toast.success(`Paid! TX: ${String(r.tx_hash).slice(0,16)}…`, { duration: 8000 });
     setAmount("");
     refreshProfile();
     loadHist();
@@ -80,12 +78,13 @@ function WithdrawPage() {
         <Wallet className="text-gold mb-2" />
         <div className="text-xs text-muted-foreground">{t("balance")}</div>
         <div className="text-3xl font-bold gold-gradient-text">{fmtUSD(profile?.balance)}</div>
+        <div className="text-[11px] text-muted-foreground mt-1">Exact: {fmtUSD(profile?.balance, 4)} available for USDT-TRC20 cashout</div>
       </div>
 
       <form onSubmit={submit} className="glass p-4 space-y-3 fade-up">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{t("request_withdraw")}</h2>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{method === "usdt_trc20" ? "LIVE · ON-CHAIN" : "ADMIN QUEUE"}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">LIVE · ON-CHAIN</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {withdrawalMethods.map((m) => (
@@ -100,8 +99,8 @@ function WithdrawPage() {
           ))}
         </div>
         <div>
-          <label className="text-xs text-muted-foreground">{method === "usdt_trc20" ? `${t("wallet_address")} (USDT TRC20)` : `${selectedMethod.label} account details`}</label>
-          <input className="input-base mt-1 font-mono text-xs" placeholder={method === "usdt_trc20" ? "T..." : "Account / phone / PUBG Player ID"} value={wallet} onChange={(e) => setWallet(e.target.value)} />
+          <label className="text-xs text-muted-foreground">{t("wallet_address")} (USDT TRC20)</label>
+          <input className="input-base mt-1 font-mono text-xs" placeholder="T..." value={wallet} onChange={(e) => setWallet(e.target.value)} />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("amount")} (USDT)</label>
@@ -110,17 +109,7 @@ function WithdrawPage() {
         <div className="text-[11px] text-muted-foreground leading-relaxed">
           {selectedMethod.helper}
         </div>
-        {method === "pubg_uc" && (
-          <div className="rounded-xl border border-white/10 overflow-hidden text-xs">
-            {pubgUcRows.map(([uc, price]) => (
-              <div key={uc} className="flex items-center justify-between px-3 py-2 border-b border-white/5 last:border-b-0">
-                <span>{uc}</span>
-                <span className="text-gold font-mono">{price}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <button disabled={busy} className="btn-gold w-full py-3">{busy ? (method === "usdt_trc20" ? "Sending on-chain…" : "Submitting request…") : "Cash out now"}</button>
+        <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Sending on-chain…" : "Cash out now"}</button>
       </form>
 
       <h2 className="text-sm font-semibold text-muted-foreground mt-6 mb-2 px-1">{t("history")}</h2>

@@ -99,34 +99,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "request_withdrawal") {
-      // Manual payout methods go to the admin queue after locking the user's real balance.
-      const amount = Number(body.amount);
-      const wallet = String(body.wallet || "").trim();
-      const method = String(body.method || "manual").trim().toLowerCase();
-      const allowedMethods = new Set(["switch", "superqi", "asiacell", "pubg_uc"]);
-      if (!allowedMethods.has(method)) return json({ error: "invalid_method" }, 400);
-      if (wallet.length < 3 || wallet.length > 160) return json({ error: "account_details_required" }, 400);
-      if (!(amount > 0)) return json({ error: "invalid_amount" }, 400);
-      if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
-
-      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
-      if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
-
-      await admin.from("profiles").update({ balance: Number(profile.balance) - amount }).eq("id", uid);
-      const { data: wd, error: wdErr } = await admin.from("withdrawals").insert({
-        user_id: uid,
-        amount,
-        wallet_address: wallet,
-        network: method.toUpperCase(),
-        status: "pending",
-      }).select().single();
-      if (wdErr) {
-        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
-        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
-        return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
-      }
-      await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal requested", body: `${amount} requested via ${method.toUpperCase()}. Admin will pay manually.` });
-      return json({ ok: true, withdrawal_id: wd!.id, status: "pending" });
+      return json({ error: "manual_methods_removed", detail: "Only USDT-TRC20 live cashout is enabled." }, 400);
     }
 
     if (action === "withdraw_now") {
@@ -158,11 +131,25 @@ Deno.serve(async (req) => {
         const headers: Record<string, string> = {};
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
         if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
-        const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
+        const normalizedPrivateKey = PK.trim().replace(/^0x/i, "");
+        const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: normalizedPrivateKey });
         if (!tronWeb.isAddress(wallet)) throw new Error("invalid_wallet");
+        const senderAddress = tronWeb.address.fromPrivateKey(normalizedPrivateKey);
+        const senderExists = await tronWeb.trx.getAccount(senderAddress);
+        if (!senderExists?.address) {
+          throw new Error("hot_wallet_not_activated: send a small amount of TRX to the payout wallet first");
+        }
+        const trxBalance = await tronWeb.trx.getBalance(senderAddress);
+        if (Number(trxBalance) < 30_000_000) {
+          throw new Error("hot_wallet_needs_trx_for_network_fees");
+        }
         const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
         const contract = await tronWeb.contract().at(USDT_CONTRACT);
         const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
+        const usdtBalance = await contract.methods.balanceOf(senderAddress).call();
+        if (Number(usdtBalance) < valueInSun) {
+          throw new Error("hot_wallet_needs_usdt_for_payouts");
+        }
         const tx: string = await contract.methods.transfer(wallet, valueInSun).send({ feeLimit: 100_000_000 });
 
         await admin.from("withdrawals").update({ status: "paid", tx_hash: tx, processed_at: new Date().toISOString() }).eq("id", wd!.id);

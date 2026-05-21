@@ -19,21 +19,27 @@ function EarnPage() {
   const [adCountdown, setAdCountdown] = useState(0);
   const [autoAds, setAutoAds] = useState(false);
   const [adsToday, setAdsToday] = useState(0);
+  const [adEarningsToday, setAdEarningsToday] = useState(0);
   const adReward = Number(settings?.ad_reward ?? 0.001);
   const adCooldown = Math.max(30, Number(settings?.ad_cooldown_seconds ?? 30));
   const adDailyLimit = Math.min(100, Number(settings?.ad_daily_limit ?? 100));
 
   const loadAll = async () => {
-    const [s, ts, comps] = await Promise.all([
+    const todayIso = new Date(Date.now() - 86400000).toISOString();
+    const [s, ts, comps, adRows] = await Promise.all([
       supabase.from("app_settings").select("*").eq("id", 1).single(),
       supabase.from("tasks").select("*").eq("active", true).order("created_at"),
       user ? supabase.from("task_completions").select("task_id, created_at").eq("user_id", user.id).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as any[] }),
+      user ? supabase.from("ad_views").select("reward").eq("user_id", user.id).gte("created_at", todayIso) : Promise.resolve({ data: [] as any[] }),
     ]);
     setSettings(s.data);
     setTasks(ts.data ?? []);
     const map: Record<string, string> = {};
     (comps as any).data?.forEach((c: any) => { if (!map[c.task_id]) map[c.task_id] = c.created_at; });
     setCompleted(map);
+    const todayAds = (adRows as any).data ?? [];
+    setAdsToday(todayAds.length);
+    setAdEarningsToday(todayAds.reduce((sum: number, row: any) => sum + Number(row.reward ?? 0), 0));
   };
 
   useEffect(() => { loadAll(); }, [user]);
@@ -73,8 +79,9 @@ function EarnPage() {
       if (r.error !== "cooldown") toast.error(r.error);
       return;
     }
-    if (!autoAds) toast.success(`+${fmtUSD(r.reward)}`);
+    if (!autoAds) toast.success(`+${fmtUSD(r.reward, 3)}`);
     setAdsToday((n) => n + 1);
+    setAdEarningsToday((n) => n + Number(r.reward ?? 0));
     setAdCountdown(adCooldown);
     refreshProfile();
   };
@@ -112,6 +119,7 @@ function EarnPage() {
       <div className="glass-gold p-5 mb-4 fade-up">
         <div className="text-xs text-muted-foreground">{t("balance")}</div>
         <div className="text-4xl font-bold gold-gradient-text">{fmtUSD(profile?.balance)}</div>
+        <div className="text-[11px] text-muted-foreground mt-1">Exact: {fmtUSD(profile?.balance, 4)} withdrawable USDT</div>
         <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
           <span>{t("total_earned")}: <b className="text-foreground">{fmtUSD(profile?.total_earned)}</b></span>
           <span className="flex items-center gap-1"><Flame size={12} className="text-orange-400" /> {profile?.streak_days ?? 0} {t("days")}</span>
@@ -133,8 +141,8 @@ function EarnPage() {
       <div className="glass p-4 mb-3 fade-up">
         <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> {t("watch_ad")}</div>
-            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(adReward, 3)} every {adCooldown}s · up to {adDailyLimit}/day</div>
+            <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> Rewarded Ad</div>
+            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(adReward, 3)} every {adCooldown}s · today {fmtUSD(adEarningsToday, 3)}</div>
           </div>
           <button onClick={watchAd} disabled={adBusy || adCountdown > 0 || autoAds || adsToday >= adDailyLimit} className="btn-gold px-4 py-2 text-sm">
             {adBusy ? "▶ ..." : adCountdown > 0 ? `${adCountdown}s` : t("watch_ad")}
@@ -144,10 +152,11 @@ function EarnPage() {
           onClick={() => setAutoAds((v) => !v)}
           className={`mt-3 w-full py-2 rounded-xl text-sm font-semibold transition ${autoAds ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/5 text-foreground border border-white/10 hover:bg-white/10"}`}
         >
-          {autoAds ? `● AUTO ON · ${adsToday}/${adDailyLimit} ads · +${fmtUSD(adsToday * adReward, 3)}` : "Start Auto-Watch (capped)"}
+            {autoAds ? `● AUTO ON · ${adsToday}/${adDailyLimit} ads · +${fmtUSD(adEarningsToday, 3)} today` : "Start Auto-Watch (capped)"}
         </button>
-        <div className="mt-3 h-16 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-[10px] text-muted-foreground">
-          {autoAds ? (adsToday >= adDailyLimit ? "daily cap reached" : `▶ playing ad ${adsToday + 1}…`) : "ad slot · adsbygoogle"}
+        <div className="mt-3 h-20 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center text-[10px] text-muted-foreground text-center px-3">
+          <span>{autoAds ? (adsToday >= adDailyLimit ? "daily cap reached" : `reward timer running · ad ${adsToday + 1}`) : "rewarded ad slot"}</span>
+          <span className="mt-1 text-[9px]">Real ad networks only pay when a legitimate ad is available and viewed.</span>
         </div>
       </div>
 
