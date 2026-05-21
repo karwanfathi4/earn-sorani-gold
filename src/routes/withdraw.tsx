@@ -46,7 +46,19 @@ function WithdrawPage() {
     setBusy(false);
     toast.dismiss("wd");
     if (r.error) {
-      toast.error(r.detail ? `${r.error}: ${String(r.detail).slice(0,120)}` : r.error);
+      const detail = String(r.detail ?? "");
+      const friendly = detail.includes("hot_wallet_not_activated")
+        ? "Cashout wallet needs TRX first. Fund the payout wallet, then try again."
+        : detail.includes("hot_wallet_needs_trx")
+          ? "Cashout wallet needs TRX for network fees."
+          : detail.includes("hot_wallet_needs_usdt")
+            ? "Cashout wallet needs USDT to pay users."
+            : r.error === "already_pending"
+              ? "You already have a cashout being processed."
+              : r.error === "payout_failed" && detail
+                ? detail.slice(0, 140)
+                : r.error;
+      toast.error(friendly);
       refreshProfile(); loadHist();
       return;
     }
