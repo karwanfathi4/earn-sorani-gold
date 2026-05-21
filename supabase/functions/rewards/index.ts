@@ -131,11 +131,25 @@ Deno.serve(async (req) => {
         const headers: Record<string, string> = {};
         const apiKey = Deno.env.get("TRONGRID_API_KEY");
         if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
-        const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: PK });
+        const normalizedPrivateKey = PK.trim().replace(/^0x/i, "");
+        const tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io", headers, privateKey: normalizedPrivateKey });
         if (!tronWeb.isAddress(wallet)) throw new Error("invalid_wallet");
+        const senderAddress = tronWeb.address.fromPrivateKey(normalizedPrivateKey);
+        const senderExists = await tronWeb.trx.getAccount(senderAddress);
+        if (!senderExists?.address) {
+          throw new Error("hot_wallet_not_activated: send a small amount of TRX to the payout wallet first");
+        }
+        const trxBalance = await tronWeb.trx.getBalance(senderAddress);
+        if (Number(trxBalance) < 30_000_000) {
+          throw new Error("hot_wallet_needs_trx_for_network_fees");
+        }
         const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
         const contract = await tronWeb.contract().at(USDT_CONTRACT);
         const valueInSun = Math.floor(amount * 1_000_000); // USDT has 6 decimals
+        const usdtBalance = await contract.methods.balanceOf(senderAddress).call();
+        if (Number(usdtBalance) < valueInSun) {
+          throw new Error("hot_wallet_needs_usdt_for_payouts");
+        }
         const tx: string = await contract.methods.transfer(wallet, valueInSun).send({ feeLimit: 100_000_000 });
 
         await admin.from("withdrawals").update({ status: "paid", tx_hash: tx, processed_at: new Date().toISOString() }).eq("id", wd!.id);
