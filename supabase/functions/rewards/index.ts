@@ -99,34 +99,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "request_withdrawal") {
-      // Manual payout methods go to the admin queue after locking the user's real balance.
-      const amount = Number(body.amount);
-      const wallet = String(body.wallet || "").trim();
-      const method = String(body.method || "manual").trim().toLowerCase();
-      const allowedMethods = new Set(["switch", "superqi", "asiacell", "pubg_uc"]);
-      if (!allowedMethods.has(method)) return json({ error: "invalid_method" }, 400);
-      if (wallet.length < 3 || wallet.length > 160) return json({ error: "account_details_required" }, 400);
-      if (!(amount > 0)) return json({ error: "invalid_amount" }, 400);
-      if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
-
-      const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
-      if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
-
-      await admin.from("profiles").update({ balance: Number(profile.balance) - amount }).eq("id", uid);
-      const { data: wd, error: wdErr } = await admin.from("withdrawals").insert({
-        user_id: uid,
-        amount,
-        wallet_address: wallet,
-        network: method.toUpperCase(),
-        status: "pending",
-      }).select().single();
-      if (wdErr) {
-        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
-        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
-        return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
-      }
-      await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal requested", body: `${amount} requested via ${method.toUpperCase()}. Admin will pay manually.` });
-      return json({ ok: true, withdrawal_id: wd!.id, status: "pending" });
+      return json({ error: "manual_methods_removed", detail: "Only USDT-TRC20 live cashout is enabled." }, 400);
     }
 
     if (action === "withdraw_now") {
