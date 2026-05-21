@@ -140,8 +140,8 @@ function EarnPage() {
       <div className="glass p-4 mb-3 fade-up">
         <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> {t("watch_ad")}</div>
-            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(adReward, 3)} every {adCooldown}s · up to {adDailyLimit}/day</div>
+            <div className="flex items-center gap-2 font-semibold"><Play size={16} className="text-gold" /> Rewarded Ad</div>
+            <div className="text-xs text-muted-foreground mt-1">+{fmtUSD(adReward, 3)} every {adCooldown}s · today {fmtUSD(adEarningsToday, 3)}</div>
           </div>
           <button onClick={watchAd} disabled={adBusy || adCountdown > 0 || autoAds || adsToday >= adDailyLimit} className="btn-gold px-4 py-2 text-sm">
             {adBusy ? "▶ ..." : adCountdown > 0 ? `${adCountdown}s` : t("watch_ad")}
@@ -151,10 +151,11 @@ function EarnPage() {
           onClick={() => setAutoAds((v) => !v)}
           className={`mt-3 w-full py-2 rounded-xl text-sm font-semibold transition ${autoAds ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/5 text-foreground border border-white/10 hover:bg-white/10"}`}
         >
-          {autoAds ? `● AUTO ON · ${adsToday}/${adDailyLimit} ads · +${fmtUSD(adsToday * adReward, 3)}` : "Start Auto-Watch (capped)"}
+            {autoAds ? `● AUTO ON · ${adsToday}/${adDailyLimit} ads · +${fmtUSD(adEarningsToday, 3)} today` : "Start Auto-Watch (capped)"}
         </button>
-        <div className="mt-3 h-16 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-[10px] text-muted-foreground">
-          {autoAds ? (adsToday >= adDailyLimit ? "daily cap reached" : `▶ playing ad ${adsToday + 1}…`) : "ad slot · adsbygoogle"}
+        <div className="mt-3 h-20 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center text-[10px] text-muted-foreground text-center px-3">
+          <span>{autoAds ? (adsToday >= adDailyLimit ? "daily cap reached" : `reward timer running · ad ${adsToday + 1}`) : "rewarded ad slot"}</span>
+          <span className="mt-1 text-[9px]">Real ad networks only pay when a legitimate ad is available and viewed.</span>
         </div>
       </div>
 
