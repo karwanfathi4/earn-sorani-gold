@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === "withdraw_now") {
-      // LIVE on-chain TRC20 USDT payout
+      // Real USDT-TRC20 cashout: pay immediately when the payout wallet is funded;
+      // otherwise keep the user's funds locked in a pending withdrawal for manual/admin payout.
       const amount = Number(body.amount);
       const wallet = String(body.wallet || "").trim();
       if (!/^T[A-Za-z0-9]{33}$/.test(wallet)) return json({ error: "invalid_wallet" }, 400);
@@ -143,11 +144,26 @@ Deno.serve(async (req) => {
         await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal paid ✅", body: `${amount} USDT sent. TX: ${tx}` });
         return json({ ok: true, tx_hash: tx, withdrawal_id: wd!.id });
       } catch (err) {
-        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
-        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
-        await admin.from("withdrawals").update({ status: "rejected", admin_note: String(err).slice(0, 500), processed_at: new Date().toISOString() }).eq("id", wd!.id);
-        console.error("payout failed", err);
-        return json({ error: "payout_failed", detail: String(err) }, 500);
+        const detail = String(err);
+        console.error("payout queued", err);
+
+        if (detail.includes("invalid_wallet")) {
+          const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+          if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+          await admin.from("withdrawals").update({ status: "rejected", admin_note: detail.slice(0, 500), processed_at: new Date().toISOString() }).eq("id", wd!.id);
+          return json({ error: "invalid_wallet", detail }, 400);
+        }
+
+        await admin.from("withdrawals").update({
+          status: "pending",
+          admin_note: `Queued for payout: ${detail}`.slice(0, 500),
+        }).eq("id", wd!.id);
+        await admin.from("notifications").insert({
+          user_id: uid,
+          title: "Withdrawal queued",
+          body: `${amount} USDT is locked for payout to your TRC20 wallet.`,
+        });
+        return json({ ok: true, queued: true, withdrawal_id: wd!.id, detail });
       }
     }
 
