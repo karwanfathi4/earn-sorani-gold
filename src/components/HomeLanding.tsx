@@ -45,9 +45,9 @@ export function HomeLanding() {
 
         <section className="grid sm:grid-cols-3 gap-4 my-12">
           {[
-            { icon: TrendingUp, t: t("watch_ad"), d: t("ad_reward") },
+            { icon: TrendingUp, t: t("daily_reward"), d: "Streak-based daily payouts" },
             { icon: Users, t: t("referrals"), d: t("referral_reward_desc") },
-            { icon: Wallet, t: t("withdraw"), d: "USDT TRC20" },
+            { icon: Wallet, t: t("withdraw"), d: "Instant USDT TRC20 on-chain" },
           ].map((f, i) => (
             <div key={i} className="glass p-6 fade-up" style={{ animationDelay: `${i * 80}ms` }}>
               <f.icon className="text-gold mb-3" size={28} />
