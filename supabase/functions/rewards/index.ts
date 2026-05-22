@@ -99,7 +99,6 @@ Deno.serve(async (req) => {
       if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
 
       const PK = Deno.env.get("TRON_PRIVATE_KEY");
-      if (!PK) return json({ error: "payout_not_configured" }, 500);
 
       const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
       if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
@@ -111,6 +110,16 @@ Deno.serve(async (req) => {
         const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
         if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
         return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
+      }
+
+      if (!PK) {
+        await admin.from("withdrawals").update({ status: "pending", admin_note: "Queued for payout: payout wallet is not configured yet" }).eq("id", wd!.id);
+        await admin.from("notifications").insert({
+          user_id: uid,
+          title: "Withdrawal queued",
+          body: `${amount} USDT is locked for payout to your TRC20 wallet.`,
+        });
+        return json({ ok: true, queued: true, withdrawal_id: wd!.id, detail: "payout wallet is not configured yet" });
       }
 
       try {
