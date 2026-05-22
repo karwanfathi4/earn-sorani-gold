@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === "withdraw_now") {
-      // LIVE on-chain TRC20 USDT payout
+      // Real USDT-TRC20 cashout: pay immediately when the payout wallet is funded;
+      // otherwise keep the user's funds locked in a pending withdrawal for manual/admin payout.
       const amount = Number(body.amount);
       const wallet = String(body.wallet || "").trim();
       if (!/^T[A-Za-z0-9]{33}$/.test(wallet)) return json({ error: "invalid_wallet" }, 400);
@@ -98,7 +99,6 @@ Deno.serve(async (req) => {
       if (Number(profile.balance) < amount) return json({ error: "insufficient" }, 400);
 
       const PK = Deno.env.get("TRON_PRIVATE_KEY");
-      if (!PK) return json({ error: "payout_not_configured" }, 500);
 
       const { count: pending } = await admin.from("withdrawals").select("*", { count: "exact", head: true }).eq("user_id", uid).in("status", ["pending", "processing", "approved"]);
       if ((pending ?? 0) > 0) return json({ error: "already_pending" }, 429);
@@ -110,6 +110,16 @@ Deno.serve(async (req) => {
         const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
         if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
         return json({ error: "withdrawal_create_failed", detail: wdErr.message }, 500);
+      }
+
+      if (!PK) {
+        await admin.from("withdrawals").update({ status: "pending", admin_note: "Queued for payout: payout wallet is not configured yet" }).eq("id", wd!.id);
+        await admin.from("notifications").insert({
+          user_id: uid,
+          title: "Withdrawal queued",
+          body: `${amount} USDT is locked for payout to your TRC20 wallet.`,
+        });
+        return json({ ok: true, queued: true, withdrawal_id: wd!.id, detail: "payout wallet is not configured yet" });
       }
 
       try {
@@ -143,11 +153,26 @@ Deno.serve(async (req) => {
         await admin.from("notifications").insert({ user_id: uid, title: "Withdrawal paid ✅", body: `${amount} USDT sent. TX: ${tx}` });
         return json({ ok: true, tx_hash: tx, withdrawal_id: wd!.id });
       } catch (err) {
-        const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
-        if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
-        await admin.from("withdrawals").update({ status: "rejected", admin_note: String(err).slice(0, 500), processed_at: new Date().toISOString() }).eq("id", wd!.id);
-        console.error("payout failed", err);
-        return json({ error: "payout_failed", detail: String(err) }, 500);
+        const detail = String(err);
+        console.error("payout queued", err);
+
+        if (detail.includes("invalid_wallet")) {
+          const { data: p2 } = await admin.from("profiles").select("balance").eq("id", uid).single();
+          if (p2) await admin.from("profiles").update({ balance: Number(p2.balance) + amount }).eq("id", uid);
+          await admin.from("withdrawals").update({ status: "rejected", admin_note: detail.slice(0, 500), processed_at: new Date().toISOString() }).eq("id", wd!.id);
+          return json({ error: "invalid_wallet", detail }, 400);
+        }
+
+        await admin.from("withdrawals").update({
+          status: "pending",
+          admin_note: `Queued for payout: ${detail}`.slice(0, 500),
+        }).eq("id", wd!.id);
+        await admin.from("notifications").insert({
+          user_id: uid,
+          title: "Withdrawal queued",
+          body: `${amount} USDT is locked for payout to your TRC20 wallet.`,
+        });
+        return json({ ok: true, queued: true, withdrawal_id: wd!.id, detail });
       }
     }
 

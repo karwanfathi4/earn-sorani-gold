@@ -36,7 +36,7 @@ function WithdrawPage() {
     const amt = Number(amount);
     if (!(amt > 0) || amt > Number(profile?.balance ?? 0)) { toast.error(t("insufficient_balance")); return; }
     setBusy(true);
-    toast.loading("Sending USDT on TRON network…", { id: "wd" });
+    toast.loading("Submitting USDT cashout…", { id: "wd" });
     const { data: sess } = await supabase.auth.getSession();
     const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rewards`, {
       method: "POST",
@@ -62,7 +62,12 @@ function WithdrawPage() {
       refreshProfile(); loadHist();
       return;
     }
-    toast.success(`Paid! TX: ${String(r.tx_hash).slice(0,16)}…`, { duration: 8000 });
+    toast.success(
+      r.queued
+        ? "Cashout requested. Your funds are locked and waiting for payout."
+        : `Paid! TX: ${String(r.tx_hash).slice(0,16)}…`,
+      { duration: 8000 },
+    );
     setAmount("");
     refreshProfile();
     loadHist();
@@ -84,7 +89,7 @@ function WithdrawPage() {
       <form onSubmit={submit} className="glass p-4 space-y-3 fade-up">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{t("request_withdraw")}</h2>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">LIVE · ON-CHAIN</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">REAL · TRC20</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {withdrawalMethods.map((m) => (
@@ -109,7 +114,7 @@ function WithdrawPage() {
         <div className="text-[11px] text-muted-foreground leading-relaxed">
           {selectedMethod.helper}
         </div>
-        <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Sending on-chain…" : "Cash out now"}</button>
+        <button disabled={busy} className="btn-gold w-full py-3">{busy ? "Submitting…" : "Cash out now"}</button>
       </form>
 
       <h2 className="text-sm font-semibold text-muted-foreground mt-6 mb-2 px-1">{t("history")}</h2>
